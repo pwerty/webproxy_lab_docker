@@ -33,13 +33,30 @@ int main(int argc, char **argv)
 
     // 포트번호를 매개변수로 Open_listenfd를 호출한다.
     listenfd = Open_listenfd(argv[1]);
+
+    // 서버는 항상 클라이언트의 연결 요청을 대기하게끔한다.
     while (1)
     {
+        // 클라이언트의 신상정보가 저장될 내용을 초기화한다.
         clientlen = sizeof(struct sockaddr_storage);
+        // Accept 함수는 리스닝 소켓(listenfd)에 도착한 연결 요청을 수락합니다.
+        // 수락된 연결은 새 소켓 디스크립터 connfd에 할당되며,
+        // 이 디스크립터를 통해 클라이언트와 통신할 수 있습니다.
+
+        // 동시에, 클라이언트의 네트워크 주소 정보가 clientaddr에 저장되고,
+        // clientlen은 실제 주소 길이를 업데이트합니다.
+        // (SA *)는 일반적인 소켓 주소 자료형(struct sockaddr)으로 캐스팅하기 위한 관례적인 방법입니다.
+
         connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
         Getnameinfo((SA *) &clientaddr, clientlen, client_hostname, MAXLINE, client_port, MAXLINE, 0);
         echo(connfd);
         Close(connfd);
+        // echo 함수는 클라이언트와의 통신을 담당하는 부분으로, 클라이언트로부터 받은 데이터를 그대로 다시 돌려보내는 간단한 에코(echo) 서비스를 구현합니다.
+        // 이 함수 내부에서는 수신 및 전송 I/O 함수들이 호출되어, 클라이언트의 요청에 대해 응답을 제공할 것입니다.
+        // 에코 서비스는 네트워크 프로그래밍의 기초적인 예제로 많이 사용됩니다.
+
+        // 클라이언트와의 에코 통신이 끝난 후, 해당 연결 소켓을 닫아 리소스를 해제합니다.
+        // 서버는 하나의 클라이언트와의 연결 처리를 완료하면, 다시 다음 연결 요청을 기다리기 위해 루프의 처음으로 돌아갑니다.
     }
 }
 
@@ -79,14 +96,16 @@ int Open_listenfd(char *port)
         Close(listenfd); // 바인드 실패, 다음꺼 시도
     }
 
-    // 정리!!
+    // listp를 해제해서 가용 메모리로 복귀
     Freeaddrinfo(listp);
-    if (!p) // 작동 되는게 없었다면
+    if (!p) // 작동 되는게 없었다면 NULL로 추정됨
         return -1;
     
     // Make it a listening socket ready to accept connection requests
     if (listen(listenfd, LISTENQ) < 0)
     {
+        // 마지막 시도때의 listenfd가 제대로 종료되지 않으면 Close를 해준다.
+        // 그리고 제대로 된 연결이 이뤄지지 않았다는 것이기도 하니 -1을 반환시킨다.
         Close(listenfd);
         return -1;
     }

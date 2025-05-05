@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     줄 바꿈 문자까지 완전히 읽으면 반환한다.
 
     응답 출력:
-    Fputs();로 읽은 데이터를 표준 출력에 출력한다.
+    Fputs(buf, stdout);로 읽은 데이터를 표준 출력에 출력한다.
     */
 
     while (Fgets(buf,MAXLINE,stdin) != NULL)
@@ -63,7 +63,6 @@ int Open_clientfd(char *hostname, char *port)
     int clientfd;
     struct addrinfo hints, *listp, *p;
 
-AI_ADDRCONFIG 플래그는 
     memset(&hints, 0, sizeof(struct addrinfo));
     // memset을 사용하여 hints 구조체를 0으로 초기화한다.
     // 이는 사용하지 않는 필드를 명확히 0으로 설정하여 예상치 못한 동작을 방지한다.
