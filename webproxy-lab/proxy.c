@@ -9,10 +9,15 @@
 static const char *user_agent_hdr =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
     "Firefox/10.0.3\r\n";
+// Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36
 
-void task(int fd);
-void serve_page(int fd);
+void task(int fd, int toServer_fd);
+void serve_page(int fd, char *contents);
 void valueSelection(char *uri, char* link, char *cgiargs);
+void read_requesthdrs(rio_t *rp);
+void get_filetype(char *filename, char *filetype);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+
 
 int main(int argc, char **argv)
 {
@@ -20,7 +25,7 @@ int main(int argc, char **argv)
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
-  rio_t rio;
+  rio_t rio, _rio;
 
   if(argc != 2)
   {
@@ -28,53 +33,100 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  // 프록시에게서 들어오는 연결 리스닝 시도.
   listenfd = Open_listenfd(argv[1]);
-
-  // 이건 tiny에 연결해야해서.. tiny가 12321로 고정되어야한다.
-  clientfd = Open_clientfd("localhost", "12321");
-  Rio_readinitb(&rio, clientfd);
+  // Tiny에 연결 시도.
+ // clientfd = Open_clientfd("localhost", "12321");
+  // 프록시와 Tiny 간의 버퍼 초기화.
+  Rio_readinitb(&_rio, clientfd);
 
   while (1)
   {
-    clientlen == sizeof(clientaddr);
+    clientlen = sizeof(clientaddr);
+    // 리스닝에서 연결 허락 되어 최종 연결된 클라이언트 발생.
     connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
-    task(connfd);
+    // 할 일 실행
+    task(connfd, clientfd);
     Close(connfd);
   }
 
-
-  return 0;
+  Close(clientfd);
+  exit(0);
 }
 
-void task(int fd)
+void task(int fd, int toServer_fd)
 {
   // fd를 위한 출력 값을 만들어야한다.
   // 즉 여기서 tiny에 값을 보내서, 다시 받아오고, 그걸 다시 뿌려주게 된다.
   struct stat sbuf;
-  char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-  char filename[MAXLINE], cgiagrgs[MAXLINE];
+  char buf[MAXLINE], _buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+  char newHeader[MAXLINE];
+  char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
 
 
   Rio_readinitb(&rio, fd);
+
+  // 프록시랑 연결된 클라이언트로부터 요청 내용을 긁어온다.
   Rio_readlineb(&rio, buf, MAXLINE);
-  printf("Request Headers\n");
+  printf("Request Headers?!\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
 
+  sprintf(newHeader, "%s %s HTTP/1.0\r\n", method, uri);
+  sprintf(newHeader, "%sHost: localhost\r\n", newHeader);
+  sprintf(newHeader, "%sServer: Tiny Web Server\r\n", newHeader);
+  sprintf(newHeader, "%sUser-Agent: %s\r\n",newHeader, user_agent_hdr);
+  sprintf(newHeader, "%sConnection: close\r\n", newHeader);
+  sprintf(newHeader, "%sProxy-Connection: close\r\n\r\n", newHeader);
+
+
   if(strcasecmp(method, "GET"))
-  {   // method의 내용이 GET이 아닌 경우 이 코드를 실행합니다 :
-      // 501, GET이 아닌 요청에 대해서 준비되지 않았습니다!
+  { // method의 내용이 GET이 아닌 경우 이 코드를 실행
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method!");
     return;
   }
+  read_requesthdrs(&rio);
+  valueSelection(uri, filename, cgiargs);
+
+  if (stat(filename, &sbuf) < 0)
+  { // 파일이 존재하지 않는 경우 중단
+    clienterror(fd, filename, "404", "Not Found", "Tiny couldn't find this file.");
+    return;
+  } 
+
+  Rio_writen(toServer_fd, *newHeader, MAXLINE);
+  Rio_readn(toServer_fd, *newHeader, MAXLINE);
+  //serve_page(fd, *_buf);
 }
 
-void serve_page(int fd)
+void serve_page(int fd, char *contents)
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF], *mallocCh;
+
+    printf("Response headers:\n");
+    printf("%s", buf);
+  
+    // filename을 읽기 모드로 열어서 파일 디스크립터를 확인한다.
+    //srcfd = Open(filename, O_RDONLY, 0);
+    // 요청된 파일을 가상 메모리 영역에 매핑한다.
+    // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+   //srcp = Malloc(filesize);
+    //Rio_readn(srcfd, srcp, filesize);
+    
+  
+    // 더 이상 파일 디스크립터를 쓸 필요가 없으니 Close한다.
+    // 이를 안 닫으면 메모리 누수가 난다.
+    Close(srcfd);
+    
+    // srcp에서 시작하는 filesize 바이트가 클라이언트의 연결 디스크립터로 복사되도록 한다.
+   // Rio_writen(fd, srcp, filesize);
+  
+    // 매핑된 가상 메모리 영역을 해제한다.
+    Free(srcp);
+    //Munmap(srcp, filesize);
 
   
 }
@@ -113,6 +165,59 @@ void valueSelection(char *uri, char* link, char *cgiargs)
     
 }
   */
+}
+
+
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg)
+{
+  char buf[MAXLINE], body[MAXBUF];
+
+  /* Build the HTTP response body */
+  sprintf(body, "<html><title>Tiny Error</title>");
+  sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
+  sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
+  sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
+  sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
+
+  /* Print the HTTP response */
+  sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+  Rio_writen(fd, buf, strlen(buf));
+  sprintf(buf, "Content-type: text/html\r\n");
+  Rio_writen(fd, buf, strlen(buf));
+  sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
+  Rio_writen(fd, buf, strlen(buf));
+  Rio_writen(fd, body, strlen(body));
+}
+
+void read_requesthdrs(rio_t *rp)
+{
+  char buf[MAXLINE];
+
+  Rio_readlineb(rp, buf, MAXLINE);
+  while(strcmp(buf, "\r\n"))
+  {
+    Rio_readlineb(rp, buf, MAXLINE);
+    //printf("%s", buf);
+  }
+  return;
+}
+
+
+void get_filetype(char *filename, char *filetype)
+{
+
+  if(strstr(filename, ".html"))
+    strcpy(filetype, "text/html");
+  else if (strstr(filename, ".gif"))
+    strcpy(filetype, "image/gif");
+  else if (strstr(filename, ".png"))
+    strcpy(filetype, "image/png");
+  else if (strstr(filename, ".jpg"))
+    strcpy(filetype, "image/jpeg");
+  else if (strstr(filename, ".mpg"))
+    strcpy(filetype, "video/mpeg");
+  else
+    strcpy(filetype, "text/plain");
 }
 
 // 헤더값 필수값을 수동으로 삽입하라고?
