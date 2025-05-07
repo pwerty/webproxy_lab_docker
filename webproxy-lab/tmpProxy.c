@@ -13,7 +13,7 @@ static const char *user_agent_hdr =
 
 void *task(void *fd);
 void realTask(int client_fd);
-void format_http_header(char *client_rio, char *path, char *hostname, char *other_header);
+void format_http_header(rio_t *client_rio, char *path, char *hostname, char *other_header);
 void read_requesthdrs(rio_t *rp, char *host_header, char *other_header);
 void get_filetype(char *filename, char *filetype);
 
@@ -66,7 +66,7 @@ void realTask(int client_fd)
   }
 
  parseURI(uri, hostname, port, path);
-    // 대충 이 언저리에서 uri를 바탕으로 캐시 접근이 필요해보인다.
+
 
     read_requesthdrs(&client_rio, hostHeader, otherHeader); // read HTTP request headers
     // HTTP 1.1->HTTP 1.0으로 변경 
@@ -102,7 +102,7 @@ void read_requesthdrs(rio_t *rp, char *host_header, char *other_header){
       }
       else if(!strncasecmp(buf, "User-Agent:", 11)||!strncasecmp(buf, "Connection:", 11)||!strncasecmp(buf, "Proxy-Connection:", 17)){
         //얘들은 버림
-        continue;
+        continue;;
       }else{
         //그 외의 헤더는 다른곳에 저장해둠 
         strcat(other_header, buf);
@@ -110,7 +110,7 @@ void read_requesthdrs(rio_t *rp, char *host_header, char *other_header){
     }
   }
 
-void format_http_header(char *client_rio, char *path, char *hostname, char *other_header){
+void format_http_header(rio_t *client_rio, char *path, char *hostname, char *other_header){
     sprintf( client_rio,
     "GET %s HTTP/1.0\r\n"
     "Host: %s\r\n"

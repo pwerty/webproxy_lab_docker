@@ -66,7 +66,7 @@ void realTask(int client_fd)
   }
 
  parseURI(uri, hostname, port, path);
-    // 대충 이 언저리에서 uri를 바탕으로 캐시 접근이 필요해보인다.
+
 
     read_requesthdrs(&client_rio, hostHeader, otherHeader); // read HTTP request headers
     // HTTP 1.1->HTTP 1.0으로 변경 
